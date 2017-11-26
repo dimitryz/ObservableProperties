@@ -8,7 +8,13 @@
 import Foundation
 
 public enum ObservablePropertyChangeType {
+    /// Subscribing to a property also notifies the observer of the current value.
     case initial
+    
+    /// Observer is notified before the property is changed.
+    case prior
+    
+    /// Default. Observer is notified after a property changes.
     case new
 }
 
@@ -18,10 +24,33 @@ public enum ObservablePropertyChangeType {
  observer when the value changes. It is similar to Objective-C's KVO system but
  for Swift.
  
+ Unlike the original KVO system, this Swift version always passes the old and the new
+ values of the observed property. When passing `.initial`, both the old value and new
+ value are the same: they are the current value.
+ 
+ As well, unlike the original KVO system, properties do not support dot-notation
+ observation. For instance, it's not possible to chain properties.
+ 
  */
 public class ObservableProperty<T> {
     
-    public typealias ObserverFunction = (ObservableProperty<T>, T, T, ObservablePropertyChangeType) -> Void
+    public typealias Element = T
+    public typealias ObserverFunction = (ObservableProperty<Element>, ObservableChange) -> Void
+    
+    public struct ObservableChange {
+        let changeType: ObservablePropertyChangeType
+        let newValue: Element
+        let oldValue: Element
+        
+        var isInitial: Bool { return changeType == .initial }
+        var isPrior: Bool { return changeType == .prior }
+        var isNew: Bool { return changeType == .new }
+    }
+    
+    public struct ObserverProperties<Element> {
+        let callback: ObserverFunction
+        let changeTypes: Set<ObservablePropertyChangeType>
+    }
     
     public init(_ value: T) {
         self.value = value
@@ -35,12 +64,16 @@ public class ObservableProperty<T> {
         return value
     }
     
-    public func observe(observer: AnyObject, current: Bool = false, function: @escaping ObserverFunction) {
+    public func observe(
+        observer: AnyObject,
+        changeTypes: [ObservablePropertyChangeType] = [.new],
+        callback: @escaping ObserverFunction)
+    {
         let weakObserver = WeakObserver(observer)
-        observers[weakObserver] = function
+        observers[weakObserver] = ObserverProperties(callback: callback, changeTypes: Set(changeTypes))
         
-        if current {
-            function(self, value, value, .initial)
+        if changeTypes.contains(.initial) {
+            callback(self, ObservableChange(changeType: .initial, newValue: value, oldValue: value))
         }
     }
     
@@ -50,28 +83,44 @@ public class ObservableProperty<T> {
     
     // MARK: Private
     
-    private var observers: [WeakObserver: ObserverFunction] = [:]
+    private var observers: [WeakObserver: ObserverProperties<Element>] = [:]
     
     private var value: T {
+        willSet {
+            notify(newValue: newValue, oldValue: value, changeType: .prior)
+        }
         didSet {
-            notify(newValue: value, oldValue: oldValue)
+            notify(newValue: value, oldValue: oldValue, changeType: .new)
         }
     }
     
     private func notify(newValue: T, oldValue: T, changeType: ObservablePropertyChangeType = .new) {
-        // Keeps an eye out on any nil observers in the list for cleanup
-        var foundNil: Bool = false
+        guard observers.count > 0 else { return }
         
-        for (weakObserver, observerFunction) in observers {
-            if weakObserver.observer == nil {
-                foundNil = true
-            } else {
-                observerFunction(self, newValue, oldValue, changeType)
+        // Keeps an eye out on any nil observers in the list for cleanup
+        var foundNilObserver: Bool = false
+        
+        var change: ObservableChange? = nil
+        for (weakObserver, observerProperties) in observers {
+            guard weakObserver.observer != nil else {
+                foundNilObserver = false
+                continue
+            }
+            
+            if observerProperties.changeTypes.contains(changeType) {
+                if change == nil {
+                    change = ObservableChange(
+                        changeType: changeType,
+                        newValue: newValue,
+                        oldValue: oldValue)
+                }
+                
+                observerProperties.callback(self, change!)
             }
         }
         
-        if foundNil {
-            // Cleans up any nil observers
+        // Cleans up any nil observers
+        if foundNilObserver {
             observers = observers.filter { weakObserver, observerFunction in
                 return weakObserver.observer != nil
             }

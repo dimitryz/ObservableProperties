@@ -7,9 +7,10 @@ class ObservablePropertiesTests: XCTestCase {
         let expectation = self.expectation(description: "New value should equal true")
         
         let booleanProperty = ObservableProperty(false)
-        booleanProperty.observe(observer: self) { [weak expectation] (property, newValue, oldValue, type) in
-            XCTAssert(newValue)
-            XCTAssertFalse(oldValue)
+        booleanProperty.observe(observer: self) { [weak expectation] (property, change) in
+            XCTAssert(change.changeType == .new)
+            XCTAssert(change.newValue)
+            XCTAssertFalse(change.oldValue)
             expectation?.fulfill()
         }
         
@@ -24,8 +25,8 @@ class ObservablePropertiesTests: XCTestCase {
         let expectation = self.expectation(description: "New value should contain 1 element")
         
         let arrayProperty = ObservableProperty<[Int]>([])
-        arrayProperty.observe(observer: self) { [weak expectation] (property, newValue, oldValue, type) in
-            XCTAssert(newValue.count == 1)
+        arrayProperty.observe(observer: self) { [weak expectation] (property, change) in
+            XCTAssert(change.newValue.count == 1)
             expectation?.fulfill()
         }
         
@@ -40,7 +41,7 @@ class ObservablePropertiesTests: XCTestCase {
         var counter = 1
         
         let intProperty = ObservableProperty(1)
-        intProperty.observe(observer: self) { (property, newValue, oldValue, type) in
+        intProperty.observe(observer: self) { (property, change) in
             counter -= 1
         }
         
@@ -62,19 +63,44 @@ class ObservablePropertiesTests: XCTestCase {
         var counter = 2
         
         let property = ObservableProperty(1)
-        property.observe(observer: self, current: true) { (property, newValue, oldValue, changeType) in
+        property.observe(observer: self, changeTypes: [.initial, .new]) { (property, change) in
             if counter == 2 {
-                XCTAssertEqual(changeType, ObservablePropertyChangeType.initial)
+                XCTAssert(change.changeType == .initial)
             } else if counter == 1 {
-                XCTAssertEqual(changeType, ObservablePropertyChangeType.new)
+                XCTAssert(change.changeType == .new)
             }
             
             counter = counter - 1
             
-            XCTAssertEqual(newValue, oldValue)
+            XCTAssertEqual(change.newValue, change.oldValue)
         }
         property.set(1)
         
+        XCTAssertEqual(counter, 0)
+    }
+    
+    func testRemoveObserver() {
+        var counter = 0
+        let property = ObservableProperty(true)
+        property.observe(observer: self) { (property, change) in
+            counter = counter - 1
+        }
+        property.stopObserving(observer: self)
+        XCTAssertEqual(counter, 0)
+    }
+    
+    func testNewAndPriorObserver() {
+        var counter = 2
+        let property = ObservableProperty(true)
+        property.observe(observer: self, changeTypes: [.new, .prior]) { (property, change) in
+            if counter == 2 {
+                XCTAssert(change.changeType == .prior)
+            } else if counter == 1 {
+                XCTAssert(change.changeType == .new)
+            }
+            counter = counter - 1
+        }
+        property.set(false)
         XCTAssertEqual(counter, 0)
     }
 }
