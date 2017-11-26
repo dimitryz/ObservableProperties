@@ -7,6 +7,11 @@
 
 import Foundation
 
+public enum ObservablePropertyChangeType {
+    case initial
+    case new
+}
+
 /**
  
  An observable property is a wrapper around any Equatable value that notifies any
@@ -16,7 +21,7 @@ import Foundation
  */
 public class ObservableProperty<T> {
     
-    public typealias ObserverFunction = (ObservableProperty<T>, T, T) -> Void
+    public typealias ObserverFunction = (ObservableProperty<T>, T, T, ObservablePropertyChangeType) -> Void
     
     public init(_ value: T) {
         self.value = value
@@ -30,9 +35,13 @@ public class ObservableProperty<T> {
         return value
     }
     
-    public func observe(observer: AnyObject, function: @escaping ObserverFunction) {
+    public func observe(observer: AnyObject, current: Bool = false, function: @escaping ObserverFunction) {
         let weakObserver = WeakObserver(observer)
         observers[weakObserver] = function
+        
+        if current {
+            function(self, value, value, .initial)
+        }
     }
     
     public func stopObserving(observer: AnyObject) {
@@ -49,7 +58,7 @@ public class ObservableProperty<T> {
         }
     }
     
-    private func notify(newValue: T, oldValue: T) {
+    private func notify(newValue: T, oldValue: T, changeType: ObservablePropertyChangeType = .new) {
         // Keeps an eye out on any nil observers in the list for cleanup
         var foundNil: Bool = false
         
@@ -57,7 +66,7 @@ public class ObservableProperty<T> {
             if weakObserver.observer == nil {
                 foundNil = true
             } else {
-                observerFunction(self, newValue, oldValue)
+                observerFunction(self, newValue, oldValue, changeType)
             }
         }
         
@@ -79,3 +88,9 @@ extension ObservableProperty where T: Equatable {
     }
 }
 
+extension ObservableProperty: Equatable {
+    
+    public static func ==(lhs: ObservableProperty, rhs: ObservableProperty) -> Bool {
+        return lhs === rhs
+    }
+}
