@@ -13,7 +13,6 @@ import Foundation
  observer when the value changes. It is similar to Objective-C's KVO system but
  for Swift.
  
- 
  */
 public class ObservableProperty<T> {
     
@@ -70,3 +69,13 @@ public class ObservableProperty<T> {
         }
     }
 }
+
+extension ObservableProperty where T: Equatable {
+    
+    public func setIfDifferent(_ newValue: T) {
+        if self.value != newValue {
+            self.value = newValue
+        }
+    }
+}
+
