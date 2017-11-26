@@ -50,6 +50,7 @@ public class ObservableProperty<T> {
     public struct ObserverProperties<Element> {
         let callback: ObserverFunction
         let changeTypes: Set<ObservablePropertyChangeType>
+        let dispatchQueue: DispatchQueue?
     }
     
     public init(_ value: T) {
@@ -67,10 +68,11 @@ public class ObservableProperty<T> {
     public func observe(
         observer: AnyObject,
         changeTypes: [ObservablePropertyChangeType] = [.new],
+        onQueue dispatchQueue: DispatchQueue? = nil,
         callback: @escaping ObserverFunction)
     {
         let weakObserver = WeakObserver(observer)
-        observers[weakObserver] = ObserverProperties(callback: callback, changeTypes: Set(changeTypes))
+        observers[weakObserver] = ObserverProperties(callback: callback, changeTypes: Set(changeTypes), dispatchQueue: dispatchQueue)
         
         if changeTypes.contains(.initial) {
             callback(self, ObservableChange(changeType: .initial, newValue: value, oldValue: value))
@@ -115,7 +117,13 @@ public class ObservableProperty<T> {
                         oldValue: oldValue)
                 }
                 
-                observerProperties.callback(self, change!)
+                if let dispatchQueue = observerProperties.dispatchQueue {
+                    dispatchQueue.async {
+                        observerProperties.callback(self, change!)
+                    }
+                } else {
+                    observerProperties.callback(self, change!)
+                }
             }
         }
         
@@ -128,18 +136,22 @@ public class ObservableProperty<T> {
     }
 }
 
+// MARK: Equatable
+
+extension ObservableProperty: Equatable {
+    
+    public static func ==(lhs: ObservableProperty, rhs: ObservableProperty) -> Bool {
+        return lhs === rhs
+    }
+}
+
+// MARK: T: Equatable
+
 extension ObservableProperty where T: Equatable {
     
     public func setIfDifferent(_ newValue: T) {
         if self.value != newValue {
             self.value = newValue
         }
-    }
-}
-
-extension ObservableProperty: Equatable {
-    
-    public static func ==(lhs: ObservableProperty, rhs: ObservableProperty) -> Bool {
-        return lhs === rhs
     }
 }
