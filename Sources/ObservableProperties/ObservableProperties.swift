@@ -20,9 +20,9 @@ public enum ObservablePropertyChangeType {
 
 /**
  
- An observable property is a wrapper around any Equatable value that notifies any
- observer when the value changes. It is similar to Objective-C's KVO system but
- for Swift.
+ An observable property wraps any value and notifies its observers whenever that values is changed.
+ It is similar to Objective-C's KVO system but for Swift and without the unversality and key
+ dot-notation of KVO.
  
  Unlike the original KVO system, this Swift version always passes the old and the new
  values of the observed property. When passing `.initial`, both the old value and new
@@ -53,15 +53,24 @@ public class ObservableProperty<T> {
         let dispatchQueue: DispatchQueue?
     }
     
-    public init(_ value: T) {
+    public var value: Element {
+        willSet {
+            notify(newValue: newValue, oldValue: value, changeType: .prior)
+        }
+        didSet {
+            notify(newValue: value, oldValue: oldValue, changeType: .new)
+        }
+    }
+    
+    public init(_ value: Element) {
         self.value = value
     }
     
-    public func set(_ value: T) {
+    public func set(_ value: Element) {
         self.value = value
     }
     
-    public func get() -> T {
+    public func get() -> Element {
         return value
     }
     
@@ -72,10 +81,13 @@ public class ObservableProperty<T> {
         callback: @escaping ObserverFunction)
     {
         let weakObserver = WeakObserver(observer)
-        observers[weakObserver] = ObserverProperties(callback: callback, changeTypes: Set(changeTypes), dispatchQueue: dispatchQueue)
+        let observerProperties = ObserverProperties<Element>(callback: callback, changeTypes: Set(changeTypes), dispatchQueue: dispatchQueue)
+        
+        observers[weakObserver] = observerProperties
         
         if changeTypes.contains(.initial) {
-            callback(self, ObservableChange(changeType: .initial, newValue: value, oldValue: value))
+            let change = ObservableChange(changeType: .initial, newValue: value, oldValue: value)
+            callObserver(properties: observerProperties, change: change)
         }
     }
     
@@ -86,15 +98,6 @@ public class ObservableProperty<T> {
     // MARK: Private
     
     private var observers: [WeakObserver: ObserverProperties<Element>] = [:]
-    
-    private var value: T {
-        willSet {
-            notify(newValue: newValue, oldValue: value, changeType: .prior)
-        }
-        didSet {
-            notify(newValue: value, oldValue: oldValue, changeType: .new)
-        }
-    }
     
     private func notify(newValue: T, oldValue: T, changeType: ObservablePropertyChangeType = .new) {
         guard observers.count > 0 else { return }
@@ -117,13 +120,7 @@ public class ObservableProperty<T> {
                         oldValue: oldValue)
                 }
                 
-                if let dispatchQueue = observerProperties.dispatchQueue {
-                    dispatchQueue.async {
-                        observerProperties.callback(self, change!)
-                    }
-                } else {
-                    observerProperties.callback(self, change!)
-                }
+                callObserver(properties: observerProperties, change: change!)
             }
         }
         
@@ -132,6 +129,16 @@ public class ObservableProperty<T> {
             observers = observers.filter { weakObserver, observerFunction in
                 return weakObserver.observer != nil
             }
+        }
+    }
+    
+    private func callObserver(properties: ObserverProperties<Element>, change: ObservableChange) {
+        if let dispatchQueue = properties.dispatchQueue {
+            dispatchQueue.async {
+                properties.callback(self, change)
+            }
+        } else {
+            properties.callback(self, change)
         }
     }
 }

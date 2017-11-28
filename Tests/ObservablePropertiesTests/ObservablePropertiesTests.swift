@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import ObservableProperties
 
@@ -102,5 +103,37 @@ class ObservablePropertiesTests: XCTestCase {
         }
         property.set(false)
         XCTAssertEqual(counter, 0)
+    }
+    
+    func testArrayChange() {
+        let expectation = self.expectation(description: "New value should contain 2 elements")
+        
+        let property = ObservableProperty([1])
+        property.observe(observer: self) { property, change in
+            XCTAssert(change.newValue == [1, 2])
+            expectation.fulfill()
+        }
+        property.value.append(2)
+        
+        waitForExpectations(timeout: 1) { (error) in
+            XCTAssertNil(error, "\(String(describing: error))")
+        }
+    }
+    
+    func testAsyncTest() {
+        let expectation = self.expectation(description: "Property should be false")
+        let dispatchQueue = DispatchQueue(label: "observer queue")
+        let property = ObservableProperty(true)
+        
+        property.observe(observer: self, onQueue: dispatchQueue) { property, change in
+            XCTAssert(change.newValue == false)
+            XCTAssertFalse(Thread.current.isMainThread)
+            expectation.fulfill()
+        }
+        property.value = false
+        
+        waitForExpectations(timeout: 1) { error in
+            XCTAssertNil(error, "\(String(describing: error))")
+        }
     }
 }
