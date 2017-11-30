@@ -38,13 +38,13 @@ public class ObservableProperty<T> {
     public typealias ObserverFunction = (ObservableProperty<Element>, ObservableChange) -> Void
     
     public struct ObservableChange {
-        let changeType: ObservablePropertyChangeType
-        let newValue: Element
-        let oldValue: Element
+        public let changeType: ObservablePropertyChangeType
+        public let newValue: Element
+        public let oldValue: Element
         
-        var isInitial: Bool { return changeType == .initial }
-        var isPrior: Bool { return changeType == .prior }
-        var isNew: Bool { return changeType == .new }
+        public var isInitial: Bool { return changeType == .initial }
+        public var isPrior: Bool { return changeType == .prior }
+        public var isNew: Bool { return changeType == .new }
     }
     
     public struct ObserverProperties<Element> {
